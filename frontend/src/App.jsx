@@ -9,7 +9,7 @@ import ChatPanel      from "./components/ChatPanel";
 export default function App() {
   // Sidebar settings
   const [apiKey,     setApiKey]     = useState("");
-  const [modelName,  setModelName]  = useState("gpt-4o");
+  const [modelName,  setModelName]  = useState("gemini-1.5-flash");
   const [autoChart,  setAutoChart]  = useState(true);
   const [useCleaned, setUseCleaned] = useState(true);
 

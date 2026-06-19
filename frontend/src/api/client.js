@@ -1,6 +1,6 @@
 /* API client — all fetch calls to the FastAPI backend centralised here */
 
-const BASE = "http://localhost:8000";
+const BASE = ""; // Vite proxies /api/* → http://localhost:8000
 
 async function _handleResponse(res) {
   if (!res.ok) {

@@ -121,7 +121,7 @@ export default function ChatPanel({ sessionId, apiKey, modelName, autoChart, use
       return;
     }
     if (!apiKey) {
-      alert("Please enter your OpenAI API key in the sidebar.");
+      alert("Please enter your Gemini API key in the sidebar. Get one free at https://aistudio.google.com/app/apikey");
       return;
     }
 
@@ -180,7 +180,7 @@ export default function ChatPanel({ sessionId, apiKey, modelName, autoChart, use
           </div>
         </div>
         <span className="badge badge-purple" style={{ fontSize: ".68rem" }}>
-          {modelName || "gpt-4o"}
+          {modelName || "gemini-1.5-flash"}
         </span>
       </div>
 

@@ -1,6 +1,7 @@
 """llm_agent.py — LLM chat agent and chart spec inference.
 
-Uses the OpenAI Python SDK (compatible with any OpenAI-spec provider).
+Uses the Google Gen AI Python SDK (google-genai >= 1.0).
+Supports any Gemini model (e.g. gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash).
 """
 
 from __future__ import annotations
@@ -12,7 +13,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from openai import OpenAI
+from google import genai
+from google.genai import types
 
 
 # ---------------------------------------------------------------------------
@@ -48,47 +50,54 @@ def _build_context(df: pd.DataFrame) -> str:
 # Chat agent
 # ---------------------------------------------------------------------------
 
+_SYSTEM_PROMPT = (
+    "You are DataAgent, an expert data analyst AI. "
+    "You have been given a dataset and must answer the user's questions accurately. "
+    "Always reference specific column names, numbers, and statistics from the dataset. "
+    "Be concise but thorough. Format numbers clearly. "
+    "If asked about trends, correlations, or patterns, explain them with supporting data."
+)
+
+
 @dataclass
 class DataChatAgent:
-    """Wraps an OpenAI client to answer questions about a DataFrame."""
+    """Wraps a Gemini client to answer questions about a DataFrame."""
 
-    client: OpenAI
+    api_key: str
     model_name: str
     dataframe: pd.DataFrame
-    history: list[dict[str, str]] = field(default_factory=list)
+    _chat: Any = field(default=None, init=False, repr=False)
+    _context_injected: bool = field(default=False, init=False, repr=False)
 
-    _SYSTEM_PROMPT = (
-        "You are DataAgent, an expert data analyst AI. "
-        "You have been given a dataset and must answer the user's questions accurately. "
-        "Always reference specific column names, numbers, and statistics from the dataset. "
-        "Be concise but thorough. Format numbers clearly. "
-        "If asked about trends, correlations, or patterns, explain them with supporting data."
-    )
+    def _get_chat(self):
+        """Lazily create or reuse the Gemini chat session."""
+        if self._chat is None:
+            client = genai.Client(api_key=self.api_key)
+            self._chat = client.chats.create(
+                model=self.model_name,
+                config=types.GenerateContentConfig(
+                    system_instruction=_SYSTEM_PROMPT,
+                    temperature=0.2,
+                ),
+            )
+        return self._chat
 
     def ask(self, question: str) -> str:
         """Send a user question, maintain conversation history, return answer text."""
+        chat = self._get_chat()
 
-        context = _build_context(self.dataframe)
-        if not self.history:
-            # Inject dataset context in the first user turn
+        if not self._context_injected:
+            context = _build_context(self.dataframe)
             first_content = (
                 f"Here is the dataset I want to discuss:\n\n{context}\n\n"
                 f"My first question: {question.strip()}"
             )
-            self.history.append({"role": "user", "content": first_content})
+            self._context_injected = True
+            response = chat.send_message(first_content)
         else:
-            self.history.append({"role": "user", "content": question.strip()})
+            response = chat.send_message(question.strip())
 
-        messages = [{"role": "system", "content": self._SYSTEM_PROMPT}] + self.history
-
-        response = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=messages,
-            temperature=0.2,
-        )
-        answer = (response.choices[0].message.content or "").strip()
-        self.history.append({"role": "assistant", "content": answer})
-        return answer
+        return response.text.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -106,9 +115,8 @@ def get_or_create_agent(
 ) -> DataChatAgent:
     """Return an existing agent for this session or create a new one."""
     if session_id not in _agents or _agents[session_id].dataframe is not df:
-        client = OpenAI(api_key=api_key)
         _agents[session_id] = DataChatAgent(
-            client=client, model_name=model_name, dataframe=df
+            api_key=api_key, model_name=model_name, dataframe=df
         )
     return _agents[session_id]
 
@@ -138,7 +146,7 @@ def infer_chart_spec(
     api_key: str,
     model_name: str,
 ) -> dict[str, Any] | None:
-    """Ask the LLM to derive a chart specification from a natural-language question."""
+    """Ask Gemini to derive a chart specification from a natural-language question."""
 
     schema = ", ".join(f"{c}:{t}" for c, t in df.dtypes.items())
     prompt = (
@@ -150,21 +158,24 @@ def infer_chart_spec(
         "- x and y must be column names that exist in the schema (or empty string).\n"
         "- hue should be a categorical column or empty string.\n"
         "- For correlation questions, use heatmap.\n"
-        "- For distributions, use hist.\n\n"
+        "- For distributions, use hist.\n"
+        "- Always set make_chart=true if a chart would be helpful.\n\n"
         f"Dataset schema: {schema}\n"
-        f"Question: {question}"
+        f"Question: {question}\n\n"
+        "Return ONLY valid JSON, no explanation, no markdown code fences."
     )
 
-    client = OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
         model=model_name,
-        messages=[
-            {"role": "system", "content": "Return only valid JSON."},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction="You are a JSON-only chart planner. Return only valid JSON.",
+            temperature=0,
+            response_mime_type="application/json",
+        ),
     )
-    raw = (response.choices[0].message.content or "").strip()
+    raw = (response.text or "").strip()
 
     try:
         spec = _extract_json(raw)

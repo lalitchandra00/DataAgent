@@ -106,7 +106,7 @@ class ChatRequest(BaseModel):
     session_id: str
     question: str
     api_key: str
-    model_name: str = "gpt-4o"
+    model_name: str = "gemini-1.5-flash"
     use_cleaned: bool = True
 
 
@@ -133,7 +133,7 @@ class ChartRequest(BaseModel):
     session_id: str
     question: str
     api_key: str
-    model_name: str = "gpt-4o"
+    model_name: str = "gemini-1.5-flash"
     use_cleaned: bool = True
 
 
@@ -193,3 +193,4 @@ def _get_frame(session_id: str, *, raw: bool) -> pd.DataFrame:
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+

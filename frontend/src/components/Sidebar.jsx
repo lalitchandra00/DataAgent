@@ -1,11 +1,30 @@
 import { useState } from "react";
 
+const GEMINI_MODELS = [
+  { value: "gemini-1.5-flash",   label: "Gemini 1.5 Flash (Fast)" },
+  { value: "gemini-1.5-pro",     label: "Gemini 1.5 Pro (Smart)" },
+  { value: "gemini-2.0-flash",   label: "Gemini 2.0 Flash" },
+  { value: "gemini-2.5-flash",   label: "Gemini 2.5 Flash (Latest)" },
+];
+
 export default function Sidebar({ apiKey, setApiKey, modelName, setModelName, autoChart, setAutoChart, useCleaned, setUseCleaned }) {
   const [showKey, setShowKey] = useState(false);
+  const [customModel, setCustomModel] = useState(false);
+
+  function handleModelSelect(e) {
+    const val = e.target.value;
+    if (val === "__custom__") {
+      setCustomModel(true);
+      setModelName("");
+    } else {
+      setCustomModel(false);
+      setModelName(val);
+    }
+  }
 
   return (
     <aside style={{
-      width: 260,
+      width: 270,
       flexShrink: 0,
       background: "var(--bg-card)",
       borderRight: "1px solid var(--border)",
@@ -33,15 +52,37 @@ export default function Sidebar({ apiKey, setApiKey, modelName, setModelName, au
         <p style={{ fontSize: ".72rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
           AI-powered data cleaning &amp; insights
         </p>
+        <div style={{
+          marginTop: ".5rem",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: ".35rem",
+          background: "rgba(66,133,244,.12)",
+          border: "1px solid rgba(66,133,244,.3)",
+          borderRadius: 6,
+          padding: ".2rem .55rem",
+          fontSize: ".68rem",
+          color: "#4285f4",
+          fontWeight: 600,
+        }}>
+          <span>✦</span> Powered by Gemini
+        </div>
       </div>
 
       <div className="divider" style={{ margin: 0 }} />
 
       {/* API Key */}
       <div>
-        <label style={{ fontSize: ".75rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: ".06em", display: "block", marginBottom: ".5rem" }}>
-          OpenAI API Key
+        <label style={{ fontSize: ".75rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: ".06em", display: "block", marginBottom: ".35rem" }}>
+          Gemini API Key
         </label>
+        <p style={{ fontSize: ".68rem", color: "var(--text-muted)", marginBottom: ".5rem", lineHeight: 1.5 }}>
+          Get a free key at{" "}
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer"
+            style={{ color: "#4285f4", textDecoration: "none" }}>
+            aistudio.google.com
+          </a>
+        </p>
         <div style={{ position: "relative" }}>
           <input
             id="api-key-input"
@@ -49,7 +90,7 @@ export default function Sidebar({ apiKey, setApiKey, modelName, setModelName, au
             type={showKey ? "text" : "password"}
             value={apiKey}
             onChange={e => setApiKey(e.target.value)}
-            placeholder="sk-..."
+            placeholder="AIza..."
             style={{ paddingRight: "2.5rem" }}
           />
           <button
@@ -70,6 +111,11 @@ export default function Sidebar({ apiKey, setApiKey, modelName, setModelName, au
             ⚠ Required for chat &amp; charts
           </p>
         )}
+        {apiKey && (
+          <p style={{ fontSize: ".7rem", color: "var(--success, #10b981)", marginTop: ".35rem" }}>
+            ✓ API key set
+          </p>
+        )}
       </div>
 
       {/* Model */}
@@ -77,14 +123,39 @@ export default function Sidebar({ apiKey, setApiKey, modelName, setModelName, au
         <label style={{ fontSize: ".75rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: ".06em", display: "block", marginBottom: ".5rem" }}>
           Model
         </label>
-        <input
-          id="model-name-input"
-          className="input"
-          type="text"
-          value={modelName}
-          onChange={e => setModelName(e.target.value)}
-          placeholder="gpt-4o"
-        />
+        {!customModel ? (
+          <select
+            id="model-select"
+            className="input"
+            value={GEMINI_MODELS.find(m => m.value === modelName) ? modelName : "__custom__"}
+            onChange={handleModelSelect}
+            style={{ cursor: "pointer" }}
+          >
+            {GEMINI_MODELS.map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+            <option value="__custom__">Custom model name…</option>
+          </select>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: ".4rem" }}>
+            <input
+              id="model-name-input"
+              className="input"
+              type="text"
+              value={modelName}
+              onChange={e => setModelName(e.target.value)}
+              placeholder="gemini-1.5-flash"
+              autoFocus
+            />
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ fontSize: ".72rem" }}
+              onClick={() => { setCustomModel(false); setModelName("gemini-1.5-flash"); }}
+            >
+              ← Back to presets
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Toggles */}
