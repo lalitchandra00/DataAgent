@@ -12,6 +12,11 @@ export default function App() {
   const [modelName,  setModelName]  = useState("gemini-2.0-flash");
   const [useCleaned, setUseCleaned] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [exhaustedModels, setExhaustedModels] = useState({});
+
+  function handleModelExhausted(model) {
+    setExhaustedModels(prev => ({ ...prev, [model]: true }));
+  }
 
   // Session state
   const [sessionId,      setSessionId]      = useState(null);
@@ -93,6 +98,7 @@ export default function App() {
       <Sidebar
         modelName={modelName} setModelName={setModelName}
         useCleaned={useCleaned} setUseCleaned={setUseCleaned}
+        exhaustedModels={exhaustedModels}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
@@ -133,6 +139,7 @@ export default function App() {
           sessionId={sessionId}
           modelName={modelName}
           useCleaned={useCleaned}
+          onModelExhausted={handleModelExhausted}
         />
 
         {/* Step 5: Graph */}

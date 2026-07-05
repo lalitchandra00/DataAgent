@@ -81,7 +81,7 @@ function TypingIndicator() {
   );
 }
 
-export default function ChatPanel({ sessionId, modelName, useCleaned }) {
+export default function ChatPanel({ sessionId, modelName, useCleaned, onModelExhausted }) {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -116,12 +116,21 @@ export default function ChatPanel({ sessionId, modelName, useCleaned }) {
     try {
       const chatRes = await chatWithData({ sessionId, question: q, modelName, useCleaned });
 
+      let reply = chatRes.answer;
+      if (chatRes.exhausted_model) {
+        if (onModelExhausted) onModelExhausted(chatRes.exhausted_model);
+        reply = `⚠️ (Auto-fallback: ${chatRes.exhausted_model} quota was exhausted. Fell back to ${chatRes.used_fallback})\n\n` + reply;
+      }
+
       setMessages(m => [...m, {
         role: "assistant",
-        content: chatRes.answer,
+        content: reply,
         ts:      Date.now(),
       }]);
     } catch (err) {
+      if (err.detail && err.detail.exhausted_model) {
+        if (onModelExhausted) onModelExhausted(err.detail.exhausted_model);
+      }
       setMessages(m => [...m, {
         role: "assistant",
         content: `⚠ Error: ${err.message}`,

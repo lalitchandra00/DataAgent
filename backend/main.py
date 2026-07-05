@@ -114,6 +114,23 @@ def clean_data(session_id: str = Form(...)) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Fallback models configuration & helpers
+# ---------------------------------------------------------------------------
+
+FALLBACK_MODELS = [
+    "gemini-2.0-flash",
+    "gemini-2.5-flash",
+    "gemini-1.5-flash",
+    "gemini-2.5-pro",
+    "gemini-1.5-pro"
+]
+
+def is_quota_error(exc: Exception) -> bool:
+    err_str = str(exc)
+    return "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()
+
+
+# ---------------------------------------------------------------------------
 # Chat
 # ---------------------------------------------------------------------------
 
@@ -134,13 +151,51 @@ def chat(req: ChatRequest) -> dict[str, Any]:
     if not api_key:
         raise HTTPException(500, "GEMINI_API_KEY is not configured on the backend server.")
 
-    try:
-        agent = get_or_create_agent(req.session_id, api_key, req.model_name, df)
-        answer = agent.ask(req.question)
-    except Exception as exc:
-        raise HTTPException(500, f"LLM error: {exc}") from exc
+    current_model = req.model_name
 
-    return {"answer": answer}
+    try:
+        agent = get_or_create_agent(req.session_id, api_key, current_model, df)
+        answer = agent.ask(req.question)
+        return {"answer": answer}
+    except Exception as exc:
+        if not is_quota_error(exc):
+            raise HTTPException(500, f"LLM error: {exc}") from exc
+
+        # Initial model failed with quota error. Loop fallbacks.
+        exhausted_model = current_model
+        used_fallback = None
+        answer = None
+
+        for fallback in FALLBACK_MODELS:
+            if fallback == exhausted_model:
+                continue
+            try:
+                # Cache key must include the fallback suffix to prevent mixing states
+                agent = get_or_create_agent(f"{req.session_id}_{fallback}", api_key, fallback, df)
+                answer = agent.ask(req.question)
+                used_fallback = fallback
+                break
+            except Exception as fallback_exc:
+                if is_quota_error(fallback_exc):
+                    continue
+                else:
+                    raise HTTPException(500, f"LLM error during fallback: {fallback_exc}") from fallback_exc
+
+        if answer is not None:
+            return {
+                "answer": answer,
+                "exhausted_model": exhausted_model,
+                "used_fallback": used_fallback
+            }
+
+        # All fallback attempts failed
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "message": f"The quota for {req.model_name} is exhausted. Please try selecting a different model.",
+                "exhausted_model": req.model_name
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +219,40 @@ def generate_chart(req: ChartRequest) -> dict[str, Any]:
     if not api_key:
         raise HTTPException(500, "GEMINI_API_KEY is not configured on the backend server.")
 
-    spec = infer_chart_spec(req.question, df, api_key, req.model_name)
+    current_model = req.model_name
+    spec = None
+    exhausted_model = None
+    used_fallback = None
+
+    try:
+        spec = infer_chart_spec(req.question, df, api_key, current_model)
+    except Exception as exc:
+        if not is_quota_error(exc):
+            raise HTTPException(500, f"LLM error: {exc}") from exc
+
+        exhausted_model = current_model
+        for fallback in FALLBACK_MODELS:
+            if fallback == exhausted_model:
+                continue
+            try:
+                spec = infer_chart_spec(req.question, df, api_key, fallback)
+                used_fallback = fallback
+                break
+            except Exception as fallback_exc:
+                if is_quota_error(fallback_exc):
+                    continue
+                else:
+                    raise HTTPException(500, f"LLM error during fallback: {fallback_exc}") from fallback_exc
+
+        if not spec:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "message": f"The quota for {req.model_name} is exhausted. Please try selecting a different model.",
+                    "exhausted_model": req.model_name
+                }
+            )
+
     if not spec:
         return {"chart": None, "message": "No chart applicable for this question."}
 
@@ -173,7 +261,11 @@ def generate_chart(req: ChartRequest) -> dict[str, Any]:
         return {"chart": None, "message": "Chart could not be rendered."}
 
     encoded = base64.b64encode(png_bytes).decode("utf-8")
-    return {"chart": encoded, "spec": spec}
+    res = {"chart": encoded, "spec": spec}
+    if exhausted_model:
+        res["exhausted_model"] = exhausted_model
+        res["used_fallback"] = used_fallback
+    return res
 
 
 # ---------------------------------------------------------------------------
