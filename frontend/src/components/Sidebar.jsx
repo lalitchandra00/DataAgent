@@ -3,10 +3,12 @@ import { useState } from "react";
 const GEMINI_MODELS = [
   { value: "gemini-2.0-flash",   label: "Gemini 2.0 Flash (Fast)" },
   { value: "gemini-2.5-flash",   label: "Gemini 2.5 Flash" },
+  { value: "gemini-1.5-flash",   label: "Gemini 1.5 Flash" },
   { value: "gemini-2.5-pro",     label: "Gemini 2.5 Pro (Smart)" },
+  { value: "gemini-1.5-pro",     label: "Gemini 1.5 Pro" },
 ];
 
-export default function Sidebar({ modelName, setModelName, useCleaned, setUseCleaned, isOpen, onClose }) {
+export default function Sidebar({ modelName, setModelName, useCleaned, setUseCleaned, exhaustedModels = {}, isOpen, onClose }) {
   const [customModel, setCustomModel] = useState(false);
 
   function handleModelSelect(e) {
@@ -71,18 +73,27 @@ export default function Sidebar({ modelName, setModelName, useCleaned, setUseCle
           Model
         </label>
         {!customModel ? (
-          <select
-            id="model-select"
-            className="input"
-            value={GEMINI_MODELS.find(m => m.value === modelName) ? modelName : "__custom__"}
-            onChange={handleModelSelect}
-            style={{ cursor: "pointer" }}
-          >
-            {GEMINI_MODELS.map(m => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-            <option value="__custom__">Custom model name…</option>
-          </select>
+          <div style={{ display: "flex", flexDirection: "column", gap: ".35rem" }}>
+            <select
+              id="model-select"
+              className="input"
+              value={GEMINI_MODELS.find(m => m.value === modelName) ? modelName : "__custom__"}
+              onChange={handleModelSelect}
+              style={{ cursor: "pointer" }}
+            >
+              {GEMINI_MODELS.map(m => (
+                <option key={m.value} value={m.value}>
+                  {exhaustedModels[m.value] ? "🔴 " : ""}{m.label} {exhaustedModels[m.value] ? "(Quota Exhausted)" : ""}
+                </option>
+              ))}
+              <option value="__custom__">Custom model name…</option>
+            </select>
+            {exhaustedModels[modelName] && (
+              <p style={{ fontSize: ".7rem", color: "var(--warn, #f59e0b)", marginTop: ".15rem", display: "flex", alignItems: "center", gap: ".25rem" }}>
+                <span>⚠️</span> Quota exhausted. Try selecting a different model.
+              </p>
+            )}
+          </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: ".4rem" }}>
             <input

@@ -5,8 +5,15 @@ const BASE = import.meta.env.VITE_API_BASE_URL || "";
 async function _handleResponse(res) {
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
-    try { const j = await res.json(); msg = j.detail || j.message || msg; } catch {}
-    throw new Error(msg);
+    let detail = null;
+    try {
+      const j = await res.json();
+      detail = j.detail;
+      msg = (typeof detail === "object" && detail !== null) ? (detail.message || msg) : (detail || j.message || msg);
+    } catch {}
+    const err = new Error(msg);
+    err.detail = detail;
+    throw err;
   }
   return res.json();
 }
